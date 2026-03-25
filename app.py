@@ -8,12 +8,11 @@ CORS(app)
 
 chat_history = []
 
-# Better working free OpenRouter models
+# ONLY currently safer OpenRouter free models
 FREE_MODELS = [
-    "mistralai/mistral-7b-instruct:free",
     "meta-llama/llama-3.1-8b-instruct:free",
-    "qwen/qwen-2.5-7b-instruct:free",
-    "openchat/openchat-7b:free"
+    "mistralai/mistral-7b-instruct:free",
+    "qwen/qwen2.5-7b-instruct:free"
 ]
 
 def is_code_query(text):
@@ -52,15 +51,13 @@ def chat():
 
     if is_code_query(user_input):
         system_prompt = """
-You are Codefy Agent, a professional coding AI.
+You are Codefy Agent, a coding AI assistant.
 
-STRICT RULES:
-- Give WORKING code first
-- Then give a SHORT explanation
-- Keep answers compact and useful
-- Use proper syntax
-- If user asks for fix, give corrected code
-- Prefer simple beginner-friendly code unless user asks advanced
+RULES:
+- Give working code first
+- Then give short explanation
+- Keep answers clean and useful
+- Use beginner-friendly code unless user asks advanced
 """
         max_tokens = 500
         temperature = 0.3
@@ -68,7 +65,6 @@ STRICT RULES:
         system_prompt = """
 You are Codefy Agent, a helpful AI assistant.
 Reply clearly, briefly, and directly.
-Avoid long unnecessary explanations.
 """
         max_tokens = 250
         temperature = 0.5
@@ -81,7 +77,7 @@ Avoid long unnecessary explanations.
     }
 
     reply = None
-    last_error = None
+    last_error = "No model tried yet."
 
     for model in FREE_MODELS:
         try:
@@ -109,6 +105,8 @@ Avoid long unnecessary explanations.
                 if choices and choices[0].get("message", {}).get("content"):
                     reply = choices[0]["message"]["content"].strip()
                     break
+                else:
+                    last_error = f"{model} -> No valid response."
             else:
                 last_error = f"{model} -> {response.status_code}: {response.text}"
 
@@ -116,7 +114,7 @@ Avoid long unnecessary explanations.
             last_error = f"{model} -> {str(e)}"
 
     if not reply:
-        reply = f"All free AI models are currently unavailable. Try again later.\n\nLast error:\n{last_error}"
+        reply = f"All available free AI models are temporarily unavailable.\n\nLast error:\n{last_error}"
 
     chat_history.append({"role": "assistant", "content": reply})
     chat_history[:] = chat_history[-12:]

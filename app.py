@@ -12,8 +12,7 @@ def is_code_query(text):
     keywords = [
         "code", "error", "python", "java", "fix", "bug",
         "program", "c++", "html", "css", "javascript",
-        "login", "function", "api", "react", "flask",
-        "sql", "node", "backend", "frontend"
+        "login", "function", "api", "react", "flask"
     ]
     return any(word in text.lower() for word in keywords)
 
@@ -32,7 +31,7 @@ def chat():
     user_input = (data.get("message") or "").strip()
 
     if not user_input:
-        return jsonify({"reply": "Please enter a message."})
+        return jsonify({"reply": "Please enter a message"})
 
     api_key = os.getenv("GROQ_API_KEY")
 
@@ -44,31 +43,32 @@ def chat():
 
     if is_code_query(user_input):
         system_prompt = """
-You are Codefy Agent, a professional coding AI.
+You are a professional coding AI.
 
-RULES:
+STRICT RULES:
 - Give WORKING code first
 - Then give a SHORT explanation
 - Keep answers compact and useful
 - Use proper syntax
 - If user asks for fix, give corrected code
-- Prefer beginner-friendly code unless user asks advanced
+- Prefer simple beginner-friendly code unless user asks advanced
 """
-        max_tokens = 700
+        max_tokens = 800
         temperature = 0.3
     else:
         system_prompt = """
-You are Codefy Agent, a helpful AI assistant.
+You are a helpful AI assistant.
 Reply clearly, briefly, and directly.
+Avoid long unnecessary explanations.
 """
-        max_tokens = 300
+        max_tokens = 400
         temperature = 0.5
 
     try:
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {api_key.strip()}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             },
             json={
@@ -80,11 +80,11 @@ Reply clearly, briefly, and directly.
                 "max_tokens": max_tokens,
                 "temperature": temperature
             },
-            timeout=30
+            timeout=25
         )
 
         if response.status_code != 200:
-            return jsonify({"reply": f"Groq API Error {response.status_code}: {response.text}"})
+            return jsonify({"reply": f"API Error {response.status_code}: {response.text}"})
 
         result = response.json()
         choices = result.get("choices", [])
@@ -101,6 +101,3 @@ Reply clearly, briefly, and directly.
     chat_history[:] = chat_history[-12:]
 
     return jsonify({"reply": reply})
-
-if __name__ == "__main__":
-    app.run(debug=True)

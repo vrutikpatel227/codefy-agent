@@ -8,13 +8,6 @@ CORS(app)
 
 chat_history = []
 
-# ONLY currently safer OpenRouter free models
-FREE_MODELS = [
-    "meta-llama/llama-3.1-8b-instruct:free",
-    "mistralai/mistral-7b-instruct:free",
-    "qwen/qwen2.5-7b-instruct:free"
-]
-
 def is_code_query(text):
     keywords = [
         "code", "error", "python", "java", "fix", "bug",
@@ -26,7 +19,7 @@ def is_code_query(text):
 
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({"message": "Codefy Agent backend is running!"})
+    return jsonify({"message": "Codefy Agent backend is running with Groq!"})
 
 @app.route("/chat", methods=["POST", "OPTIONS"])
 def chat():
@@ -41,80 +34,68 @@ def chat():
     if not user_input:
         return jsonify({"reply": "Please enter a message."})
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
 
     if not api_key:
-        return jsonify({"reply": "Missing OPENROUTER_API_KEY"}), 500
+        return jsonify({"reply": "Missing GROQ_API_KEY"}), 500
 
     chat_history.append({"role": "user", "content": user_input})
     recent_history = chat_history[-6:]
 
     if is_code_query(user_input):
         system_prompt = """
-You are Codefy Agent, a coding AI assistant.
+You are Codefy Agent, a professional coding AI.
 
 RULES:
-- Give working code first
-- Then give short explanation
-- Keep answers clean and useful
-- Use beginner-friendly code unless user asks advanced
+- Give WORKING code first
+- Then give a SHORT explanation
+- Keep answers compact and useful
+- Use proper syntax
+- If user asks for fix, give corrected code
+- Prefer beginner-friendly code unless user asks advanced
 """
-        max_tokens = 500
+        max_tokens = 700
         temperature = 0.3
     else:
         system_prompt = """
 You are Codefy Agent, a helpful AI assistant.
 Reply clearly, briefly, and directly.
 """
-        max_tokens = 250
+        max_tokens = 300
         temperature = 0.5
 
-    headers = {
-        "Authorization": f"Bearer {api_key.strip()}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://vrutikpatel227.github.io/codefy-agent/",
-        "X-Title": "Codefy Agent"
-    }
-
-    reply = None
-    last_error = "No model tried yet."
-
-    for model in FREE_MODELS:
-        try:
-            payload = {
-                "model": model,
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key.strip()}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama3-8b-8192",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     *recent_history
                 ],
                 "max_tokens": max_tokens,
                 "temperature": temperature
-            }
+            },
+            timeout=30
+        )
 
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
+        if response.status_code != 200:
+            return jsonify({"reply": f"Groq API Error {response.status_code}: {response.text}"})
 
-            if response.status_code == 200:
-                result = response.json()
-                choices = result.get("choices", [])
+        result = response.json()
+        choices = result.get("choices", [])
 
-                if choices and choices[0].get("message", {}).get("content"):
-                    reply = choices[0]["message"]["content"].strip()
-                    break
-                else:
-                    last_error = f"{model} -> No valid response."
-            else:
-                last_error = f"{model} -> {response.status_code}: {response.text}"
+        if not choices:
+            return jsonify({"reply": "No response from AI."})
 
-        except Exception as e:
-            last_error = f"{model} -> {str(e)}"
+        reply = choices[0]["message"]["content"].strip()
 
-    if not reply:
-        reply = f"All available free AI models are temporarily unavailable.\n\nLast error:\n{last_error}"
+    except Exception as e:
+        reply = f"Error: {str(e)}"
 
     chat_history.append({"role": "assistant", "content": reply})
     chat_history[:] = chat_history[-12:]

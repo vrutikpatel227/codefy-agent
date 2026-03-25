@@ -117,7 +117,7 @@ Avoid long unnecessary explanations.
             return jsonify({
                 "reply": "All free AI models are currently unavailable. Try again later.",
                 "debug": last_error
-            }), 200
+            })
 
         chat_history.append({"role": "assistant", "content": reply})
         chat_history[:] = chat_history[-12:]
@@ -126,3 +126,6 @@ Avoid long unnecessary explanations.
 
     except Exception as e:
         return jsonify({"reply": f"Backend Error: {str(e)}"}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True)

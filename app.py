@@ -8,11 +8,12 @@ CORS(app)
 
 chat_history = []
 
+# Better working free OpenRouter models
 FREE_MODELS = [
-    "meta-llama/llama-3.1-8b-instruct:free",
     "mistralai/mistral-7b-instruct:free",
-    "openchat/openchat-7b:free",
-    "nousresearch/nous-capybara-7b:free"
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "qwen/qwen-2.5-7b-instruct:free",
+    "openchat/openchat-7b:free"
 ]
 
 def is_code_query(text):
@@ -20,7 +21,7 @@ def is_code_query(text):
         "code", "error", "python", "java", "fix", "bug",
         "program", "c++", "html", "css", "javascript",
         "login", "function", "api", "react", "flask",
-        "sql", "php", "node", "backend", "frontend"
+        "sql", "node", "backend", "frontend"
     ]
     return any(word in text.lower() for word in keywords)
 
@@ -33,25 +34,24 @@ def chat():
     global chat_history
 
     if request.method == "OPTIONS":
-        return jsonify({"status": "ok"}), 200
+        return "", 200
 
-    try:
-        data = request.get_json(silent=True) or {}
-        user_input = (data.get("message") or "").strip()
+    data = request.get_json(silent=True) or {}
+    user_input = (data.get("message") or "").strip()
 
-        if not user_input:
-            return jsonify({"reply": "Please enter a message."})
+    if not user_input:
+        return jsonify({"reply": "Please enter a message."})
 
-        api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = os.getenv("OPENROUTER_API_KEY")
 
-        if not api_key:
-            return jsonify({"reply": "Missing OPENROUTER_API_KEY in Vercel."}), 500
+    if not api_key:
+        return jsonify({"reply": "Missing OPENROUTER_API_KEY"}), 500
 
-        chat_history.append({"role": "user", "content": user_input})
-        recent_history = chat_history[-6:]
+    chat_history.append({"role": "user", "content": user_input})
+    recent_history = chat_history[-6:]
 
-        if is_code_query(user_input):
-            system_prompt = """
+    if is_code_query(user_input):
+        system_prompt = """
 You are Codefy Agent, a professional coding AI.
 
 STRICT RULES:
@@ -62,70 +62,66 @@ STRICT RULES:
 - If user asks for fix, give corrected code
 - Prefer simple beginner-friendly code unless user asks advanced
 """
-            max_tokens = 500
-            temperature = 0.3
-        else:
-            system_prompt = """
+        max_tokens = 500
+        temperature = 0.3
+    else:
+        system_prompt = """
 You are Codefy Agent, a helpful AI assistant.
 Reply clearly, briefly, and directly.
 Avoid long unnecessary explanations.
 """
-            max_tokens = 250
-            temperature = 0.5
+        max_tokens = 250
+        temperature = 0.5
 
-        headers = {
-            "Authorization": f"Bearer {str(api_key).strip()}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://vrutikpatel227.github.io/codefy-agent/",
-            "X-Title": "Codefy Agent"
-        }
+    headers = {
+        "Authorization": f"Bearer {api_key.strip()}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://vrutikpatel227.github.io/codefy-agent/",
+        "X-Title": "Codefy Agent"
+    }
 
-        reply = None
-        last_error = None
+    reply = None
+    last_error = None
 
-        for model in FREE_MODELS:
-            try:
-                response = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers=headers,
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            *recent_history
-                        ],
-                        "max_tokens": max_tokens,
-                        "temperature": temperature
-                    },
-                    timeout=25
-                )
+    for model in FREE_MODELS:
+        try:
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    *recent_history
+                ],
+                "max_tokens": max_tokens,
+                "temperature": temperature
+            }
 
-                if response.status_code == 200:
-                    result = response.json()
-                    choices = result.get("choices", [])
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
 
-                    if choices and choices[0].get("message", {}).get("content"):
-                        reply = choices[0]["message"]["content"].strip()
-                        break
-                else:
-                    last_error = response.text
+            if response.status_code == 200:
+                result = response.json()
+                choices = result.get("choices", [])
 
-            except Exception as model_error:
-                last_error = str(model_error)
+                if choices and choices[0].get("message", {}).get("content"):
+                    reply = choices[0]["message"]["content"].strip()
+                    break
+            else:
+                last_error = f"{model} -> {response.status_code}: {response.text}"
 
-        if not reply:
-            return jsonify({
-                "reply": "All free AI models are currently unavailable. Try again later.",
-                "debug": last_error
-            })
+        except Exception as e:
+            last_error = f"{model} -> {str(e)}"
 
-        chat_history.append({"role": "assistant", "content": reply})
-        chat_history[:] = chat_history[-12:]
+    if not reply:
+        reply = f"All free AI models are currently unavailable. Try again later.\n\nLast error:\n{last_error}"
 
-        return jsonify({"reply": reply})
+    chat_history.append({"role": "assistant", "content": reply})
+    chat_history[:] = chat_history[-12:]
 
-    except Exception as e:
-        return jsonify({"reply": f"Backend Error: {str(e)}"}), 500
+    return jsonify({"reply": reply})
 
 if __name__ == "__main__":
     app.run(debug=True)

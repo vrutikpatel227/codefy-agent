@@ -69,7 +69,7 @@ Avoid long unnecessary explanations.
                 "X-Title": "Codefy Agent"
             },
             json={
-                "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
+                "model": "google/gemma-2-9b-it:free",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     *recent_history

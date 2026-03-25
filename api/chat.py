@@ -8,7 +8,7 @@ CORS(app)
 
 chat_history = []
 
-# Free models fallback list
+# Working free fallback models
 FREE_MODELS = [
     "meta-llama/llama-3.1-8b-instruct:free",
     "mistralai/mistral-7b-instruct:free",
@@ -27,7 +27,7 @@ def is_code_query(text):
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Codefy Agent backend is running!"
+    return jsonify({"message": "Codefy Agent backend is running!"})
 
 @app.route("/chat", methods=["POST", "OPTIONS"])
 def chat():
@@ -81,6 +81,7 @@ Avoid long unnecessary explanations.
     }
 
     reply = None
+    last_error = None
 
     try:
         for model in FREE_MODELS:
@@ -106,9 +107,14 @@ Avoid long unnecessary explanations.
                 if choices:
                     reply = choices[0]["message"]["content"].strip()
                     break
+            else:
+                last_error = response.text
 
         if not reply:
-            return jsonify({"reply": "All free AI models are currently unavailable. Please try again later."})
+            return jsonify({
+                "reply": "All free AI models are currently unavailable. Please try again later.",
+                "debug": last_error
+            })
 
     except Exception as e:
         reply = f"Server Error: {str(e)}"
